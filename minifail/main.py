@@ -13,9 +13,8 @@ import sys
 import subprocess
 
 from docopt import docopt
-from minifail import getifaddrs
-from minifail import netutils
 
+from minifail import netutils
 
 PORT = 1694
 CHECK_PERIOD = 1 # in seconds
@@ -111,30 +110,6 @@ def loop_until_master_not_beating(broadcast, debug=False):
 
         time.sleep(CHECK_PERIOD)
 
-def current_configuration(target_interface_name, target_ip, target_netmask):
-    addresses = []
-
-    for family, interface_name, data in getifaddrs.getifaddrs():
-        if (family == socket.AF_INET and
-            interface_name.startswith(target_interface_name)):
-            addresses.append(data)
-
-    target_network = netutils.make_network(target_ip, target_netmask)
-
-    candidates = []
-    for address in addresses:
-        network = netutils.make_network(address['addr'], address['netmask'])
-        if target_network == network:
-            candidates.append(address)
-
-    for address in candidates:
-        if address['addr'] == target_ip:
-            return address
-
-    if len(candidates) > 0:
-        return candidates[0]
-
-
 def main():
     arguments = docopt(__doc__, argv=sys.argv[1:], help=True, version=None)
     debug = arguments["--debug"]
@@ -144,7 +119,7 @@ def main():
     target_netmask = arguments["<netmask>"]
     identifier = int(arguments["<identifier>"])
 
-    address = current_configuration(interface, target_ip, target_netmask)
+    address = netutils.default_address(interface, target_ip, target_netmask)
     if not address:
         error("Couldn't find matching ip/interface")
 
@@ -162,11 +137,7 @@ def main():
     except ConflictException:
         yielding_message = "Higher priority peer detected giving up "
         error(yielding_message, exit=False)
-        if sys.platform.startswith(("darwin", "freebsd")):
-            command = ["ifconfig", interface, "delete", target_ip]
-            execute_script(command)
-        else:
-            error("unsuported")
+        netutils.give_up_ip(target_ip)
 
 if __name__ == "__main__":
     main()
