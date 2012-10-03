@@ -121,7 +121,7 @@ def getifaddrs():
     ifa = ifaddrs.from_address(ptr.value)
 
     while True:
-        name = ifa.ifa_name
+        name = ifa.ifa_name.decode('utf-8')
         sa = sockaddr.from_address(ifa.ifa_addr)
         data = {}
         if sa.sa_family == socket.AF_INET:

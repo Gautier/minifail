@@ -13,8 +13,8 @@ import sys
 import subprocess
 
 from docopt import docopt
-import getifaddrs
-import netutils
+from minifail import getifaddrs
+from minifail import netutils
 
 
 PORT = 1694
@@ -35,7 +35,7 @@ def execute_script(command):
 def add_ip(interface, ip, netmask, debug=False):
     command = ["ifconfig", interface, "add", ip, "netmask", netmask, "up"]
     if debug:
-        print "Executing `%s`" % " ".join(command)
+        print("Executing `%s`" % " ".join(command))
     execute_script(command)
 
 
@@ -59,7 +59,7 @@ def master_heartbeat(broadcast, identifier, debug=False):
                     if other_identifier < identifier:
                         error(yielding_message)
                     if debug:
-                        print ("Received heartbeat with priority %s" %
+                        print("Received heartbeat with priority %s" %
                                    other_identifier)
                 except ValueError:
                     pass
@@ -74,7 +74,6 @@ def master_heartbeat(broadcast, identifier, debug=False):
 
 
 def become_master(interface, ip, netmask, command, debug=False):
-    # check for conflict, ping?
     add_ip(interface, ip, netmask, debug=debug)
     execute_script(command)
 
@@ -96,12 +95,12 @@ def loop_until_master_not_beating(broadcast, debug=False):
             data, addr = listen_sock.recvfrom(16)
         except socket.error as e:
             if debug:
-                print ("Missed a beat" % e.message)
+                print("Missed a beat %r" % e)
             failures += 1
         else:
             failures = 0
             if debug:
-                print ("received %s from %s" % (data, addr))
+                print("received %s from %s" % (data, addr))
 
         if failures == MAX_FAILURES:
             return
@@ -147,13 +146,13 @@ def main():
 
     if address['addr'] != target_ip:
         if debug:
-            print "IP is not assigned to this machine, start monitoring"
+            print("IP is not assigned to this machine, start monitoring")
         loop_until_master_not_beating(address['broadcast'], debug=debug)
         become_master(interface, target_ip, address['netmask'],
                       None, debug=debug)
 
     if debug:
-        print "Start broadcasting"
+        print("Start broadcasting")
     master_heartbeat(address['broadcast'], identifier, debug=debug)
 
 if __name__ == "__main__":
