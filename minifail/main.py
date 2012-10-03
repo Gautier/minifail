@@ -39,6 +39,10 @@ def add_ip(interface, ip, netmask, debug=False):
     execute_script(command)
 
 
+class ConflictException(Exception):
+    pass
+
+
 def master_heartbeat(broadcast, identifier, debug=False):
     broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -49,7 +53,6 @@ def master_heartbeat(broadcast, identifier, debug=False):
     listen_sock.setblocking(0)
     listen_sock.bind((broadcast, PORT))
 
-    yielding_message = "Higher priority peer detected giving up the IP XXX"
     while True:
         while True:
             try:
@@ -57,7 +60,7 @@ def master_heartbeat(broadcast, identifier, debug=False):
                 try:
                     other_identifier = int(data)
                     if other_identifier < identifier:
-                        error(yielding_message)
+                        raise ConflictException()
                     if debug:
                         print("Received heartbeat with priority %s" %
                                    other_identifier)
@@ -153,7 +156,16 @@ def main():
 
     if debug:
         print("Start broadcasting")
-    master_heartbeat(address['broadcast'], identifier, debug=debug)
+    try:
+        master_heartbeat(address['broadcast'], identifier, debug=debug)
+    except ConflictException:
+        yielding_message = "Higher priority peer detected giving up "
+        error(yielding_message, exit=False)
+        if sys.platform.startswith(("darwin", "freebsd")):
+            command = ["ifconfig", interface, "delete", target_ip]
+            execute_script(command)
+        else:
+            error("unsuported")
 
 if __name__ == "__main__":
     main()
