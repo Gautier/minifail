@@ -22,30 +22,6 @@ def error(message):
     sys.exit(1)
 
 
-def heartbeat(ip):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    while True:
-        message = b"1"
-        sent = sock.sendto(message, (ip, 1694))
-        if sent != len(message):
-            error("heartbeat sending failed")
-        time.sleep(.1)
-
-
-def listen(ip):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((ip, 1694))
-    sock.settimeout(1)
-    failures = 0
-    while True:
-        sys.stdout.flush()
-
-        if failures == 3:
-            print "DIED"
-            return
-
-
 def master_heartbeat(broadcast, identifier):
     broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -83,19 +59,14 @@ def execute_script(command):
 
 
 def add_ip(interface, ip, netmask):
-    print ["ifconfig", interface, ip, "netmask", netmask, "up"]
-    subprocess.call(["ifconfig", interface, ip, "netmask", netmask, "up"])
-
-
-def add_ip_linux(interface, ip, netmask):
     command = ["ifconfig", interface, "add", ip, "netmask", netmask, "up"]
     print command
-    subprocess.call(command)
+    execute_script(command)
 
 
 def become_master(interface, ip, netmask, command):
     # check for conflict, ping?
-    add_ip_linux(interface, ip, netmask)
+    add_ip(interface, ip, netmask)
     execute_script(command)
 
 
