@@ -1,12 +1,16 @@
-"""Usage:
-    minifail.py <interface> <ip>
+"""Minifail
+
+Usage:
+  minifail.py [--execute=<command>] <identifier> <interface> <ip> <netmask>
+
+Options:
+  --execute=<command>  command to execute when becoming master.
 """
 
 import socket
 import time
 import sys
 import struct
-import socket
 import subprocess
 
 from docopt import docopt
@@ -39,7 +43,7 @@ def listen(ip):
             print "DIED"
             return
 
-def loop(listen_ip, bcast_ip, has_ip, ip):
+def master_heartbeat(broadcast, identifier):
     broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     broadcast_sock.setblocking(0)
@@ -47,34 +51,74 @@ def loop(listen_ip, bcast_ip, has_ip, ip):
     listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listen_sock.setblocking(0)
-    listen_sock.bind((bcast_ip, 1694))
+    listen_sock.bind((broadcast, 1694))
+
+    while True:
+        while True:
+            try:
+                data, addr = listen_sock.recvfrom(16)
+                try:
+                    other_identifier = int(data)
+                    if other_identifier < identifier:
+                        error("Higher priority peer detected giving up the IP XXX")
+                    print other_identifier
+                except ValueError:
+                    pass
+            except socket.error as e:
+                break
+
+        sent = broadcast_sock.sendto(str(identifier), (broadcast, 1694))
+        if sent != len(str(identifier)):
+            error("heartbeat sending failed")
+
+        time.sleep(.5)
+
+def execute_script(command):
+    if command:
+        subprocess.call([command])
+
+def add_ip(interface, ip, netmask):
+    print ["ifconfig", interface, ip, "netmask", netmask, "up"]
+    subprocess.call(["ifconfig", interface, ip, "netmask", netmask, "up"])
+
+def add_ip_linux(interface, ip, netmask):
+    command = ["ifconfig", interface, "add", ip, "netmask", netmask, "up"]
+    print command
+    subprocess.call(command)
+
+def become_master(interface, ip, netmask, command):
+    # check for conflict, ping?
+    add_ip_linux(interface, ip, netmask)
+    execute_script(command)
+
+def loop_until_master_not_beating(broadcast):
+    broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    broadcast_sock.setblocking(0)
+
+    listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listen_sock.setblocking(0)
+    listen_sock.bind((broadcast, 1694))
 
     failures = 0
 
     while True:
         # check conflicts
 
-        if has_ip:
-            message = "X"
-            sent = broadcast_sock.sendto(message, (bcast_ip, 1694))
-            if sent != len(message):
-                error("heartbeat sending failed")
+        try:
+            data, addr = listen_sock.recvfrom(16)
+        except socket.error as e:
+            print e.message
+            failures += 1
         else:
-            try:
-                data, addr = listen_sock.recvfrom(16)
-            except socket.error as e:
-                print e.message
-                failures += 1
-            else:
-                failures = 0
-                print ("received", data, "from", addr)
+            failures = 0
+            print ("received", data, "from", addr)
 
-            if failures == 3:
-                # assign ip
-                yield "failover"
-                continue
+        if failures == 3:
+            return
 
-        yield None
+        time.sleep(.5)
 
 def unpack_str_ip(ip):
     return struct.unpack("!L", socket.inet_pton(socket.AF_INET, ip))[0]
@@ -88,17 +132,13 @@ def make_network(addr, netmask):
 def in_network(ip, network):
     ip = unpack_str_ip(ip)
 
-def main():
-    arguments = docopt(__doc__, argv=sys.argv[1:], help=True, version=None)
-    interface_name = arguments["<interface>"]
-    ip = arguments["<ip>"]
-
-    bcast_ip = None
-    has_ip = False
-    listen_ip = None
-
+def current_configuration(interface_name, target_ip, target_netmask):
     interfaces = [interface for interface in netifaces.interfaces()
                             if interface.startswith(interface_name)]
+
+    candidates = []
+
+    target_network = make_network(target_ip, target_netmask)
 
     for interface in interfaces:
         addresses = netifaces.ifaddresses(interface)
@@ -106,35 +146,35 @@ def main():
             continue
 
         for address in addresses[socket.AF_INET]:
-            # right network
-            broadcast = address['broadcast']
-            addr = address['addr']
-            netmask = address['netmask']
-            network = make_network(addr, netmask)
+            network = make_network(address['addr'], address['netmask'])
+            if target_network == network:
+                candidates.append(address)
 
-            if make_network(ip, netmask) == network:
-                bcast_ip = broadcast
-                listen_ip = addr
+    for address in candidates:
+        if address['addr'] == target_ip:
+            return address
 
-                if ip == addr:
-                    has_ip = True
+    if len(candidates) > 0:
+        return candidates[0]
 
-        #if socket.AF_INET not in interface:
-        #    error("Interface %s doesn't have IPV4 address (probably not up)"
-        #            % interface_name)
+def main():
+    arguments = docopt(__doc__, argv=sys.argv[1:], help=True, version=None)
+    interface = arguments["<interface>"]
+    target_ip = arguments["<ip>"]
+    target_netmask = arguments["<netmask>"]
+    identifier = int(arguments["<identifier>"])
 
-    if has_ip:
-        print "IP is assigned to this machine, start bcast_ip", ip, bcast_ip
-        print "XXX Should check for conflict"
-    else:
-        print "IP is not assigned to this machine, start listening", ip, bcast_ip
+    address = current_configuration(interface, target_ip, target_netmask)
+    if not address:
+        error("Couldn't find matching ip/interface")
 
-    for message in loop(listen_ip, bcast_ip, has_ip):
-        subprocess.call(["ifconfig", "eth0:0", "10.0.0.3", "netmask", "255.0.0.0", "up"])
-        has_ip = True
-        if message == "failure":
-            pass
-        time.sleep(.5)
+    if address['addr'] != target_ip:
+        print "IP is not assigned to this machine, start monitoring"
+        loop_until_master_not_beating(address['broadcast'])
+        become_master(interface, target_ip, address['netmask'], None)
+
+    print "Start broadcasting"
+    master_heartbeat(address['broadcast'], identifier)
 
 if __name__ == "__main__":
     main()
