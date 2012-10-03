@@ -21,6 +21,7 @@ def error(message):
     sys.stderr.write("%s\n" % message)
     sys.exit(1)
 
+
 def heartbeat(ip):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -30,6 +31,7 @@ def heartbeat(ip):
         if sent != len(message):
             error("heartbeat sending failed")
         time.sleep(.1)
+
 
 def listen(ip):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -42,6 +44,7 @@ def listen(ip):
         if failures == 3:
             print "DIED"
             return
+
 
 def master_heartbeat(broadcast, identifier):
     broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -73,23 +76,28 @@ def master_heartbeat(broadcast, identifier):
 
         time.sleep(.5)
 
+
 def execute_script(command):
     if command:
         subprocess.call([command])
 
+
 def add_ip(interface, ip, netmask):
     print ["ifconfig", interface, ip, "netmask", netmask, "up"]
     subprocess.call(["ifconfig", interface, ip, "netmask", netmask, "up"])
+
 
 def add_ip_linux(interface, ip, netmask):
     command = ["ifconfig", interface, "add", ip, "netmask", netmask, "up"]
     print command
     subprocess.call(command)
 
+
 def become_master(interface, ip, netmask, command):
     # check for conflict, ping?
     add_ip_linux(interface, ip, netmask)
     execute_script(command)
+
 
 def loop_until_master_not_beating(broadcast):
     broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -120,8 +128,10 @@ def loop_until_master_not_beating(broadcast):
 
         time.sleep(.5)
 
+
 def unpack_str_ip(ip):
     return struct.unpack("!L", socket.inet_pton(socket.AF_INET, ip))[0]
+
 
 def make_network(addr, netmask):
     addr = unpack_str_ip(addr)
@@ -129,12 +139,14 @@ def make_network(addr, netmask):
     network = addr & netmask
     return network
 
+
 def in_network(ip, network):
     ip = unpack_str_ip(ip)
 
+
 def current_configuration(interface_name, target_ip, target_netmask):
     interfaces = [interface for interface in netifaces.interfaces()
-                            if interface.startswith(interface_name)]
+                  if interface.startswith(interface_name)]
 
     candidates = []
 
@@ -156,6 +168,7 @@ def current_configuration(interface_name, target_ip, target_netmask):
 
     if len(candidates) > 0:
         return candidates[0]
+
 
 def main():
     arguments = docopt(__doc__, argv=sys.argv[1:], help=True, version=None)
