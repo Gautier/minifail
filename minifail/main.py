@@ -1,7 +1,7 @@
 """Minifail
 
 Usage:
-  minifail.py [--execute=<command>] <identifier> <interface> <ip> <netmask>
+  minifail.py [--debug] [--execute=<command>] <identifier> <interface> <ip> <netmask>
 
 Options:
   --execute=<command>  command to execute when becoming master.
@@ -17,40 +17,14 @@ import getifaddrs
 import netutils
 
 
+PORT = 1694
+CHECK_PERIOD = 1 # in seconds
+MAX_FAILURES = 3
+
+
 def error(message):
     sys.stderr.write("%s\n" % message)
     sys.exit(1)
-
-
-def master_heartbeat(broadcast, identifier):
-    broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    broadcast_sock.setblocking(0)
-
-    listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    listen_sock.setblocking(0)
-    listen_sock.bind((broadcast, 1694))
-
-    while True:
-        while True:
-            try:
-                data, addr = listen_sock.recvfrom(16)
-                try:
-                    other_identifier = int(data)
-                    if other_identifier < identifier:
-                        error("Higher priority peer detected giving up the IP XXX")
-                    print other_identifier
-                except ValueError:
-                    pass
-            except socket.error as e:
-                break
-
-        sent = broadcast_sock.sendto(str(identifier), (broadcast, 1694))
-        if sent != len(str(identifier)):
-            error("heartbeat sending failed")
-
-        time.sleep(.5)
 
 
 def execute_script(command):
@@ -58,19 +32,14 @@ def execute_script(command):
         subprocess.call([command])
 
 
-def add_ip(interface, ip, netmask):
+def add_ip(interface, ip, netmask, debug=False):
     command = ["ifconfig", interface, "add", ip, "netmask", netmask, "up"]
-    print command
+    if debug:
+        print "Executing `%s`" % " ".join(command)
     execute_script(command)
 
 
-def become_master(interface, ip, netmask, command):
-    # check for conflict, ping?
-    add_ip(interface, ip, netmask)
-    execute_script(command)
-
-
-def loop_until_master_not_beating(broadcast):
+def master_heartbeat(broadcast, identifier, debug=False):
     broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     broadcast_sock.setblocking(0)
@@ -78,26 +47,66 @@ def loop_until_master_not_beating(broadcast):
     listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listen_sock.setblocking(0)
-    listen_sock.bind((broadcast, 1694))
+    listen_sock.bind((broadcast, PORT))
+
+    yielding_message = "Higher priority peer detected giving up the IP XXX"
+    while True:
+        while True:
+            try:
+                data, addr = listen_sock.recvfrom(16)
+                try:
+                    other_identifier = int(data)
+                    if other_identifier < identifier:
+                        error(yielding_message)
+                    if debug:
+                        print ("Received heartbeat with priority %s" %
+                                   other_identifier)
+                except ValueError:
+                    pass
+            except socket.error as e:
+                break
+
+        sent = broadcast_sock.sendto(str(identifier), (broadcast, PORT))
+        if sent != len(str(identifier)):
+            error("Heartbeat sending failed")
+
+        time.sleep(CHECK_PERIOD)
+
+
+def become_master(interface, ip, netmask, command, debug=False):
+    # check for conflict, ping?
+    add_ip(interface, ip, netmask, debug=debug)
+    execute_script(command)
+
+
+def loop_until_master_not_beating(broadcast, debug=False):
+    broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    broadcast_sock.setblocking(0)
+
+    listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listen_sock.setblocking(0)
+    listen_sock.bind((broadcast, PORT))
 
     failures = 0
 
     while True:
-        # check conflicts
-
         try:
             data, addr = listen_sock.recvfrom(16)
         except socket.error as e:
-            print e.message
+            if debug:
+                print ("Missed a beat" % e.message)
             failures += 1
         else:
             failures = 0
-            print ("received", data, "from", addr)
+            if debug:
+                print ("received %s from %s" % (data, addr))
 
-        if failures == 3:
+        if failures == MAX_FAILURES:
             return
 
-        time.sleep(.5)
+        time.sleep(CHECK_PERIOD)
 
 def current_configuration(target_interface_name, target_ip, target_netmask):
     addresses = []
@@ -125,6 +134,8 @@ def current_configuration(target_interface_name, target_ip, target_netmask):
 
 def main():
     arguments = docopt(__doc__, argv=sys.argv[1:], help=True, version=None)
+    debug = arguments["--debug"]
+
     interface = arguments["<interface>"]
     target_ip = arguments["<ip>"]
     target_netmask = arguments["<netmask>"]
@@ -135,12 +146,15 @@ def main():
         error("Couldn't find matching ip/interface")
 
     if address['addr'] != target_ip:
-        print "IP is not assigned to this machine, start monitoring"
-        loop_until_master_not_beating(address['broadcast'])
-        become_master(interface, target_ip, address['netmask'], None)
+        if debug:
+            print "IP is not assigned to this machine, start monitoring"
+        loop_until_master_not_beating(address['broadcast'], debug=debug)
+        become_master(interface, target_ip, address['netmask'],
+                      None, debug=debug)
 
-    print "Start broadcasting"
-    master_heartbeat(address['broadcast'], identifier)
+    if debug:
+        print "Start broadcasting"
+    master_heartbeat(address['broadcast'], identifier, debug=debug)
 
 if __name__ == "__main__":
     main()
