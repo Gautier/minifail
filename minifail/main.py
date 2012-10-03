@@ -30,7 +30,7 @@ def error(message, exit=True):
 
 def execute_script(command):
     if command:
-        subprocess.call([command])
+        subprocess.call(command)
 
 
 def add_ip(interface, ip, netmask, debug=False):
