@@ -7,7 +7,11 @@ setup(
     author='Gautier Hayoun',
     license='Private',
     packages=find_packages(),
+    entry_points={
+        'console_scripts': [
+            'minifail = minifail.main:main',
+        ]
+    },
     install_requires=['docopt==0.5.0'],
 )
-
 

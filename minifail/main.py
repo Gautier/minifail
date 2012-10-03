@@ -10,11 +10,11 @@ Options:
 import socket
 import time
 import sys
-import struct
 import subprocess
 
 from docopt import docopt
 import getifaddrs
+import netutils
 
 
 def error(message):
@@ -99,22 +99,6 @@ def loop_until_master_not_beating(broadcast):
 
         time.sleep(.5)
 
-
-def unpack_str_ip(ip):
-    return struct.unpack("!L", socket.inet_pton(socket.AF_INET, ip))[0]
-
-
-def make_network(addr, netmask):
-    addr = unpack_str_ip(addr)
-    netmask = unpack_str_ip(netmask)
-    network = addr & netmask
-    return network
-
-
-def in_network(ip, network):
-    ip = unpack_str_ip(ip)
-
-
 def current_configuration(target_interface_name, target_ip, target_netmask):
     addresses = []
 
@@ -123,11 +107,11 @@ def current_configuration(target_interface_name, target_ip, target_netmask):
             interface_name.startswith(target_interface_name)):
             addresses.append(data)
 
-    target_network = make_network(target_ip, target_netmask)
+    target_network = netutils.make_network(target_ip, target_netmask)
 
     candidates = []
     for address in addresses:
-        network = make_network(address['addr'], address['netmask'])
+        network = netutils.make_network(address['addr'], address['netmask'])
         if target_network == network:
             candidates.append(address)
 
