@@ -22,9 +22,10 @@ CHECK_PERIOD = 1 # in seconds
 MAX_FAILURES = 3
 
 
-def error(message):
+def error(message, exit=True):
     sys.stderr.write("%s\n" % message)
-    sys.exit(1)
+    if exit:
+        sys.exit(1)
 
 
 def execute_script(command):
