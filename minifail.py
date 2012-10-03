@@ -14,7 +14,7 @@ import struct
 import subprocess
 
 from docopt import docopt
-import netifaces
+import getifaddrs
 
 
 def error(message):
@@ -144,23 +144,21 @@ def in_network(ip, network):
     ip = unpack_str_ip(ip)
 
 
-def current_configuration(interface_name, target_ip, target_netmask):
-    interfaces = [interface for interface in netifaces.interfaces()
-                  if interface.startswith(interface_name)]
+def current_configuration(target_interface_name, target_ip, target_netmask):
+    addresses = []
 
-    candidates = []
+    for family, interface_name, data in getifaddrs.getifaddrs():
+        if (family == socket.AF_INET and
+            interface_name.startswith(target_interface_name)):
+            addresses.append(data)
 
     target_network = make_network(target_ip, target_netmask)
 
-    for interface in interfaces:
-        addresses = netifaces.ifaddresses(interface)
-        if socket.AF_INET not in addresses:
-            continue
-
-        for address in addresses[socket.AF_INET]:
-            network = make_network(address['addr'], address['netmask'])
-            if target_network == network:
-                candidates.append(address)
+    candidates = []
+    for address in addresses:
+        network = make_network(address['addr'], address['netmask'])
+        if target_network == network:
+            candidates.append(address)
 
     for address in candidates:
         if address['addr'] == target_ip:
