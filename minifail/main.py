@@ -93,7 +93,6 @@ def become_master(interface, ip, netmask, script, verbose=False):
         subprocess.Popen([script])
 
 
-
 def loop_until_master_not_beating(broadcast, verbose=False):
     broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -122,6 +121,7 @@ def loop_until_master_not_beating(broadcast, verbose=False):
             return
 
         time.sleep(CHECK_PERIOD)
+
 
 def main():
     global notifier
