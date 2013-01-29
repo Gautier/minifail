@@ -133,7 +133,7 @@ def main():
     target_netmask = arguments["<netmask>"]
     identifier = int(arguments["<identifier>"])
 
-    script = arguments.get("<script>")
+    script = arguments.get("--script")
 
     host = arguments.get("--host", "localhost")
     port = arguments.get("--port", "25")
