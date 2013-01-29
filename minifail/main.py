@@ -138,7 +138,7 @@ def main():
     host = arguments.get("--host", "localhost")
     port = arguments.get("--port", "25")
     recipient = arguments.get("--recipient", "root@localhost")
-    from_email = arguments.get("--from_email", "root@localhost")
+    from_email = arguments.get("--from", "root@localhost")
 
     notifier = SMTPNotifier(host, port, recipient, from_email)
 
