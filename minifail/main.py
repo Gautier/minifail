@@ -1,4 +1,5 @@
-"""Minifail
+"""Minifail, lower identifiers have the priority if master 1 and master 0 are
+running, master 1 will give up the IP.
 
 Usage:
   minifail.py [options] <identifier> <interface> <ip> <netmask>
