@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='minifail',
-    version='0.1',
+    version='0.1.1',
     description='minifail is a simple IP failover compatible with Linux/BSD/MacOS',
     author='Gautier Hayoun',
     author_email='ghayoun@gmail.com',
