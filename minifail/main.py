@@ -69,13 +69,14 @@ def master_heartbeat(broadcast, identifier, verbose=False):
                 try:
                     other_identifier = int(data)
                     if other_identifier < identifier:
-                        raise ConflictException()
+                        raise ConflictException(
+                                "Higher priority peer detected giving up")
                     if verbose:
                         print("Received heartbeat with priority %s" %
                                    other_identifier)
                 except ValueError:
                     pass
-            except socket.error as e:
+            except socket.error:
                 break
 
         sent = broadcast_sock.sendto(str(identifier), (broadcast, PORT))
@@ -160,10 +161,10 @@ def main():
 
     try:
         master_heartbeat(address['broadcast'], identifier, verbose=verbose)
-    except ConflictException:
-        yielding_message = "Higher priority peer detected giving up "
-        error(yielding_message, exit=False)
+    except Exception as e:
         netutils.give_up_ip(target_ip)
+        error_message = "%s: %s, IP has been given up" % (type(e), str(e))
+        error(error_message, exit=False)
 
 if __name__ == "__main__":
     main()
